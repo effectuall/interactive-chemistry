@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "homepage": "https://effectuall.github.io/InteractiveChemistry/",
+  "homepage": "https://effectuall.github.io/interactive-chemistry/",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
