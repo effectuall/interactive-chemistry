@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Electrochemical Cell | 3D STEM Simulation</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #0a0a0a;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        footer {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            font-size: 12px;
+            color: #888;
+            pointer-events: none;
+        }
+
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 320px;
+            background: rgba(20, 20, 20, 0.85);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #444;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            z-index: 100;
+        }
+
+        h1 {
+            margin: 0 0 15px 0;
+            font-size: 20px;
+            color: #4cc9f0;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #bbb;
+        }
+
+        select {
+            width: 100%;
+            padding: 8px;
+            background: #222;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        #data-panel {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border-left: 4px solid #4cc9f0;
+        }
+
+        .voltage-display {
+            font-size: 32px;
+            font-family: 'Courier New', Courier, monospace;
+            color: #00ff88;
+            text-align: center;
+            margin: 10px 0;
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+        }
+
+        .cell-notation {
+            background: #111;
+            padding: 10px;
+            font-family: serif;
+            font-style: italic;
+            text-align: center;
+            border: 1px dashed #666;
+            margin-top: 10px;
+        }
+
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 13px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="ui-container">
+        <h1>Electrochemical Cell</h1>
+        <p style="font-size: 13px; color: #999; margin-bottom: 20px;">
+            Study electron transfer and potential differences between half-cells.
+        </p>
+
+        <div class="control-group">
+            <label>Anode (-) Oxidation</label>
+            <select id="anode-select">
+                <option value="Zn">Zinc (Zn)</option>
+                <option value="Mg">Magnesium (Mg)</option>
+                <option value="Al">Aluminum (Al)</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>Cathode (+) Reduction</label>
+            <select id="cathode-select">
+                <option value="Cu" selected>Copper (Cu)</option>
+                <option value="Ag">Silver (Ag) </option>
+                <option value="Au">Gold (Au)</option>
+            </select>
+        </div>
+
+        <div id="data-panel">
+            <label>Cell Potential (E°<sub>cell</sub>)</label>
+            <div class="voltage-display" id="voltage">1.10 V</div>
+            <label>Cell Notation</label>
+            <div class="cell-notation" id="notation">Zn(s) | Zn²⁺(aq) || Cu²⁺(aq) | Cu(s)</div>
+        </div>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item">
+            <div class="dot" style="background: #ffff00;"></div> Electron (e⁻) Flow
+        </div>
+        <div class="legend-item">
+            <div class="dot" style="background: #00ffff;"></div> Cation Flow (Salt Bridge)
+        </div>
+        <div class="legend-item">
+            <div class="dot" style="background: #ff00ff;"></div> Anion Flow (Salt Bridge)
+        </div>
+    </div>
+
+    <footer>3D Electrochemical Simulation - Interactive STEM Module</footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        // Data Configuration
+        const materials = {
+            'Zn': { name: 'Zinc', E: -0.76, color: 0xaaaaaa, ionColor: 0x88ccff },
+            'Mg': { name: 'Magnesium', E: -2.37, color: 0xdddddd, ionColor: 0x88ffcc },
+            'Al': { name: 'Aluminum', E: -1.66, color: 0xcccccc, ionColor: 0xaaaaff },
+            'Cu': { name: 'Copper', E: 0.34, color: 0xcd7f32, ionColor: 0x4444ff },
+            'Ag': { name: 'Silver', E: 0.80, color: 0xeeeeee, ionColor: 0x88ffff },
+            'Au': { name: 'Gold', E: 1.50, color: 0xffd700, ionColor: 0xffcc88 }
+        };
+
+        let scene, camera, renderer, controls;
+        let anodeMesh, cathodeMesh, wire, saltBridge;
+        let electrons = [], bridgeIons = [];
+        let anodeParticles, cathodeParticles;
+
+        init();
+        animate();
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 12);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+            const pointLight = new THREE.PointLight(0xffffff, 0.8);
+            pointLight.position.set(10, 10, 10);
+            scene.add(pointLight);
+
+            setupEnvironment();
+            setupCell();
+            setupParticles();
+
+            window.addEventListener('resize', onWindowResize, false);
+            document.getElementById('anode-select').addEventListener('change', updateSimulation);
+            document.getElementById('cathode-select').addEventListener('change', updateSimulation);
+        }
+
+        function setupEnvironment() {
+            // Beakers
+            const beakerGeom = new THREE.CylinderGeometry(2, 2, 4, 32, 1, true);
+            const beakerMat = new THREE.MeshPhongMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.2,
+                side: THREE.DoubleSide
+            });
+
+            // Water/Electrolyte
+            const liquidGeom = new THREE.CylinderGeometry(1.95, 1.95, 3.5, 32);
+            const liquidMat = new THREE.MeshPhongMaterial({
+                color: 0x0077ff,
+                transparent: true,
+                opacity: 0.4
+            });
+
+            // Anode Side
+            const beakerL = new THREE.Mesh(beakerGeom, beakerMat);
+            beakerL.position.x = -4;
+            scene.add(beakerL);
+
+            const liquidL = new THREE.Mesh(liquidGeom, liquidMat);
+            liquidL.position.set(-4, -0.2, 0);
+            scene.add(liquidL);
+
+            // Cathode Side
+            const beakerR = new THREE.Mesh(beakerGeom, beakerMat);
+            beakerR.position.x = 4;
+            scene.add(beakerR);
+
+            const liquidR = new THREE.Mesh(liquidGeom, liquidMat);
+            liquidR.position.set(4, -0.2, 0);
+            scene.add(liquidR);
+
+            // Wire
+            const curve = new THREE.CubicBezierCurve3(
+                new THREE.Vector3(-4, 3, 0),
+                new THREE.Vector3(-4, 6, 0),
+                new THREE.Vector3(4, 6, 0),
+                new THREE.Vector3(4, 3, 0)
+            );
+            const tubeGeom = new THREE.TubeGeometry(curve, 64, 0.05, 8, false);
+            const tubeMat = new THREE.MeshPhongMaterial({ color: 0x555555 });
+            wire = new THREE.Mesh(tubeGeom, tubeMat);
+            scene.add(wire);
+
+            // Salt Bridge
+            const bridgeCurve = new THREE.CubicBezierCurve3(
+                new THREE.Vector3(-2.8, 1, 0),
+                new THREE.Vector3(-2.8, 3.5, 0),
+                new THREE.Vector3(2.8, 3.5, 0),
+                new THREE.Vector3(2.8, 1, 0)
+            );
+            const bridgeGeom = new THREE.TubeGeometry(bridgeCurve, 64, 0.2, 12, false);
+            const bridgeMat = new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 });
+            saltBridge = new THREE.Mesh(bridgeGeom, bridgeMat);
+            scene.add(saltBridge);
+
+            // Floor
+            const floor = new THREE.GridHelper(20, 20, 0x333333, 0x222222);
+            floor.position.y = -2;
+            scene.add(floor);
+        }
+
+        function setupCell() {
+            const electrodeGeom = new THREE.BoxGeometry(0.8, 5, 0.1);
+
+            anodeMesh = new THREE.Mesh(electrodeGeom, new THREE.MeshStandardMaterial());
+            anodeMesh.position.set(-4, 1, 0);
+            scene.add(anodeMesh);
+
+            cathodeMesh = new THREE.Mesh(electrodeGeom, new THREE.MeshStandardMaterial());
+            cathodeMesh.position.set(4, 1, 0);
+            scene.add(cathodeMesh);
+
+            updateSimulation();
+        }
+
+        function setupParticles() {
+            // Electrons
+            const eGeom = new THREE.SphereGeometry(0.06, 8, 8);
+            const eMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+            for (let i = 0; i < 15; i++) {
+                const e = new THREE.Mesh(eGeom, eMat);
+                e.userData.progress = Math.random();
+                electrons.push(e);
+                scene.add(e);
+            }
+
+            // Salt Bridge Ions
+            const ionGeom = new THREE.SphereGeometry(0.08, 8, 8);
+            for (let i = 0; i < 20; i++) {
+                const color = i % 2 === 0 ? 0x00ffff : 0xff00ff;
+                const ion = new THREE.Mesh(ionGeom, new THREE.MeshBasicMaterial({ color: color }));
+                ion.userData.progress = Math.random();
+                ion.userData.type = i % 2 === 0 ? 'cation' : 'anion';
+                bridgeIons.push(ion);
+                scene.add(ion);
+            }
+        }
+
+        function updateSimulation() {
+            const anodeKey = document.getElementById('anode-select').value;
+            const cathodeKey = document.getElementById('cathode-select').value;
+
+            const anodeData = materials[anodeKey];
+            const cathodeData = materials[cathodeKey];
+
+            // UI updates
+            const voltage = (cathodeData.E - anodeData.E).toFixed(2);
+            document.getElementById('voltage').innerText = `${voltage} V`;
+            document.getElementById('notation').innerHTML =
+                `${anodeKey}(s) | ${anodeKey}<sup>n+</sup>(aq) || ${cathodeKey}<sup>m+</sup>(aq) | ${cathodeKey}(s)`;
+
+            // Visual updates
+            anodeMesh.material.color.setHex(anodeData.color);
+            cathodeMesh.material.color.setHex(cathodeData.color);
+        }
+
+        function moveAlongCurve(mesh, curve, speed, offset = 0) {
+            mesh.userData.progress += speed;
+            if (mesh.userData.progress > 1) mesh.userData.progress = 0;
+            const point = curve.getPointAt(mesh.userData.progress);
+            mesh.position.copy(point);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Animation for Electrons
+            const wireCurve = new THREE.CubicBezierCurve3(
+                new THREE.Vector3(-4, 3, 0),
+                new THREE.Vector3(-4, 6, 0),
+                new THREE.Vector3(4, 6, 0),
+                new THREE.Vector3(4, 3, 0)
+            );
+
+            electrons.forEach((e, i) => {
+                moveAlongCurve(e, wireCurve, 0.005);
+            });
+
+            // Animation for Bridge Ions
+            const bridgeCurve = new THREE.CubicBezierCurve3(
+                new THREE.Vector3(-2.8, 1, 0),
+                new THREE.Vector3(-2.8, 3.5, 0),
+                new THREE.Vector3(2.8, 3.5, 0),
+                new THREE.Vector3(2.8, 1, 0)
+            );
+
+            const reverseBridgeCurve = new THREE.CubicBezierCurve3(
+                new THREE.Vector3(2.8, 1, 0),
+                new THREE.Vector3(2.8, 3.5, 0),
+                new THREE.Vector3(-2.8, 3.5, 0),
+                new THREE.Vector3(-2.8, 1, 0)
+            );
+
+            bridgeIons.forEach((ion) => {
+                if (ion.userData.type === 'cation') {
+                    moveAlongCurve(ion, bridgeCurve, 0.002);
+                } else {
+                    moveAlongCurve(ion, reverseBridgeCurve, 0.002);
+                }
+            });
+
+            // Pulse effects for electrodes
+            const time = Date.now() * 0.001;
+            anodeMesh.scale.x = 1 + Math.sin(time * 2) * 0.02;
+            cathodeMesh.scale.x = 1 + Math.sin(time * 2 + Math.PI) * 0.02;
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+
+</html>
