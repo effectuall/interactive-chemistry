@@ -1,9 +1,9 @@
 {
   "name": "interactive3dchemistry",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
   "homepage": "https://effectuall.github.io/interactive-chemistry/",
+  "description": "An interactive 3D chemistry learning tool built with Vite and deployed on GitHub Pages.",
+  "version": "0.0.0",
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
