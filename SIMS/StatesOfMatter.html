@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive States of Matter</title>
+    <style>
+        :root {
+            --primary: #007bff;
+            --bg-dark: #0f172a;
+            --card-bg: #1e293b;
+            --text-light: #f8fafc;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        header {
+            padding: 1rem 2rem;
+            background: rgba(15, 23, 42, 0.9);
+            border-bottom: 1px solid #334155;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            color: var(--primary);
+        }
+
+        main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Sidebar Content */
+        #content-panel {
+            width: 400px;
+            padding: 2rem;
+            overflow-y: auto;
+            background: var(--card-bg);
+            border-right: 1px solid #334155;
+            box-shadow: 4px 0 15px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Visualization Area */
+        #viz-container {
+            flex: 1;
+            position: relative;
+            background: #000;
+            min-height: 300px;
+        }
+
+        #threejs-canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 1rem;
+            z-index: 50;
+            background: rgba(15, 23, 42, 0.8);
+            padding: 1rem;
+            border-radius: 50px;
+            backdrop-filter: blur(10px);
+            border: 1px solid #444;
+        }
+
+        button {
+            background: #334155;
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        button:hover {
+            background: #475569;
+        }
+
+        button.active {
+            background: var(--primary);
+            box-shadow: 0 0 15px rgba(0, 123, 255, 0.5);
+        }
+
+        .state-info {
+            display: none;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .state-info.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .transition-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            font-size: 0.85rem;
+        }
+
+        .transition-table th,
+        .transition-table td {
+            border: 1px solid #334155;
+            padding: 8px;
+            text-align: left;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        .endo {
+            background: #1e3a8a;
+            color: #93c5fd;
+        }
+
+        .exo {
+            background: #7f1d1d;
+            color: #fca5a5;
+        }
+
+        .viz-tip {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            font-size: 0.75rem;
+            color: #64748b;
+            pointer-events: none;
+        }
+
+        @media (max-width: 900px) {
+            main {
+                flex-direction: column-reverse;
+            }
+
+            #content-panel {
+                width: 100%;
+                height: 40%;
+                border-right: none;
+                border-top: 1px solid #334155;
+            }
+
+            .controls {
+                bottom: 1rem;
+                width: 90%;
+                justify-content: center;
+                padding: 0.5rem;
+            }
+
+            button {
+                padding: 0.5rem 1rem;
+                font-size: 0.8rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1>Chemistry Interactive: States of Matter</h1>
+        <div id="status-tag" style="font-size: 0.8rem; color: #94a3b8;">Simulation: Initializing...</div>
+    </header>
+
+    <main>
+        <section id="content-panel">
+            <div id="info-solid" class="state-info active">
+                <h2>Solid State</h2>
+                <p>Particles are tightly packed in a regular, repeating pattern called a <strong>crystal
+                        lattice</strong>. Strong intermolecular forces keep them in place.</p>
+                <ul>
+                    <li><strong>Motion:</strong> Only vibration in fixed spots.</li>
+                    <li><strong>Shape:</strong> Definite.</li>
+                    <li><strong>Volume:</strong> Definite.</li>
+                </ul>
+            </div>
+
+            <div id="info-liquid" class="state-info">
+                <h2>Liquid State</h2>
+                <p>Particles are close together but have enough kinetic energy to overcome some attractive forces,
+                    allowing them to flow around each other.</p>
+                <ul>
+                    <li><strong>Motion:</strong> Random, sliding motion.</li>
+                    <li><strong>Shape:</strong> Takes shape of container.</li>
+                    <li><strong>Volume:</strong> Definite.</li>
+                </ul>
+            </div>
+
+            <div id="info-gas" class="state-info">
+                <h2>Gaseous State</h2>
+                <p>Particles are far apart and move independently. Intermolecular forces are negligible compared to
+                    their kinetic energy.</p>
+                <ul>
+                    <li><strong>Motion:</strong> High-speed, random straight lines.</li>
+                    <li><strong>Shape:</strong> Indefinite.</li>
+                    <li><strong>Volume:</strong> Indefinite.</li>
+                </ul>
+            </div>
+
+            <div id="info-plasma" class="state-info">
+                <h2>Plasma State</h2>
+                <p>An "ionized gas" where electrons are stripped from nuclei. Highly sensitive to electromagnetic
+                    fields.</p>
+                <ul>
+                    <li><strong>Properties:</strong> Conducts electricity.</li>
+                    <li><strong>Visible:</strong> Stars, lightning, neon light.</li>
+                </ul>
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid #334155; margin: 2rem 0;">
+
+            <h3>Phase Transitions</h3>
+            <table class="transition-table">
+                <thead>
+                    <tr>
+                        <th>Transition</th>
+                        <th>Type</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Melting (S→L)</td>
+                        <td><span class="tag endo">Endothermic</span></td>
+                    </tr>
+                    <tr>
+                        <td>Freezing (L→S)</td>
+                        <td><span class="tag exo">Exothermic</span></td>
+                    </tr>
+                    <tr>
+                        <td>Vaporization (L→G)</td>
+                        <td><span class="tag endo">Endothermic</span></td>
+                    </tr>
+                    <tr>
+                        <td>Sublimation (S→G)</td>
+                        <td><span class="tag endo">Endothermic</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="viz-container">
+            <div class="viz-tip">Drag to rotate • Scroll to zoom</div>
+            <div class="controls">
+                <button onclick="updateState('solid')" id="btn-solid" class="active">Solid</button>
+                <button onclick="updateState('liquid')" id="btn-liquid">Liquid</button>
+                <button onclick="updateState('gas')" id="btn-gas">Gas</button>
+                <button onclick="updateState('plasma')" id="btn-plasma">Plasma</button>
+            </div>
+            <div id="threejs-canvas"></div>
+        </section>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Import OrbitControls via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        let scene, camera, renderer, controls, particleSystem, particles = [];
+        let currentState = 'solid';
+        const PARTICLE_COUNT = 1000;
+        const BOX_SIZE = 20;
+
+        function init() {
+            const container = document.getElementById('viz-container');
+            const width = container.clientWidth || window.innerWidth - 400;
+            const height = container.clientHeight || window.innerHeight;
+
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+            camera.position.set(20, 20, 35);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.getElementById('threejs-canvas').appendChild(renderer.domElement);
+
+            // Orbit Controls setup
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.autoRotate = false; // Disable auto rotation
+            controls.enablePan = true;
+            controls.minDistance = 10;
+            controls.maxDistance = 100;
+
+            const geo = new THREE.BufferGeometry();
+            const posArr = new Float32Array(PARTICLE_COUNT * 3);
+            const colArr = new Float32Array(PARTICLE_COUNT * 3);
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                particles.push({
+                    x: (Math.random() - 0.5) * BOX_SIZE,
+                    y: (Math.random() - 0.5) * BOX_SIZE,
+                    z: (Math.random() - 0.5) * BOX_SIZE,
+                    vx: (Math.random() - 0.5) * 0.15,
+                    vy: (Math.random() - 0.5) * 0.15,
+                    vz: (Math.random() - 0.5) * 0.15,
+                    targetX: 0, targetY: 0, targetZ: 0
+                });
+            }
+
+            geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+            geo.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
+
+            const mat = new THREE.PointsMaterial({
+                size: 0.5,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8,
+                map: createCircleTexture(),
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+
+            particleSystem = new THREE.Points(geo, mat);
+            scene.add(particleSystem);
+
+            const boxGeo = new THREE.BoxGeometry(BOX_SIZE, BOX_SIZE, BOX_SIZE);
+            const edges = new THREE.EdgesGeometry(boxGeo);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.5 }));
+            scene.add(line);
+
+            window.addEventListener('resize', onResize);
+            updateState('solid');
+            document.getElementById('status-tag').textContent = "Simulation: Active";
+            animate();
+        }
+
+        function createCircleTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+            grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+            grad.addColorStop(0.5, 'rgba(255, 255, 255, 0.5)');
+            grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 64, 64);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        window.updateState = function (state) {
+            currentState = state;
+            document.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+            document.getElementById('btn-' + state).classList.add('active');
+            document.querySelectorAll('.state-info').forEach(info => info.classList.remove('active'));
+            document.getElementById('info-' + state).classList.add('active');
+
+            if (state === 'solid') {
+                const side = Math.ceil(Math.pow(PARTICLE_COUNT, 1 / 3));
+                const spacing = 1.4;
+                particles.forEach((p, i) => {
+                    p.targetX = ((i % side) - side / 2) * spacing;
+                    p.targetY = ((Math.floor(i / side) % side) - side / 2) * spacing;
+                    p.targetZ = (Math.floor(i / (side * side)) - side / 2) * spacing;
+                });
+            }
+        };
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Update controls for damping effect
+            if (controls) controls.update();
+
+            const pos = particleSystem.geometry.attributes.position.array;
+            const col = particleSystem.geometry.attributes.color.array;
+
+            particles.forEach((p, i) => {
+                const limit = BOX_SIZE / 2;
+
+                if (currentState === 'solid') {
+                    p.x = p.targetX + (Math.random() - 0.5) * 0.1;
+                    p.y = p.targetY + (Math.random() - 0.5) * 0.1;
+                    p.z = p.targetZ + (Math.random() - 0.5) * 0.1;
+                    setCol(col, i, 0.4, 0.7, 1.0);
+                }
+                else if (currentState === 'liquid') {
+                    p.vx += (Math.random() - 0.5) * 0.005;
+                    p.vy += (Math.random() - 0.5) * 0.005 - 0.01;
+                    p.vz += (Math.random() - 0.5) * 0.005;
+                    p.x += p.vx; p.y += p.vy; p.z += p.vz;
+
+                    if (Math.abs(p.x) > limit) p.vx *= -0.8;
+                    if (p.y < -limit) { p.y = -limit; p.vy *= -0.2; }
+                    if (p.y > limit) { p.y = limit; p.vy *= -1; }
+                    if (Math.abs(p.z) > limit) p.vz *= -0.8;
+                    setCol(col, i, 0.2, 0.5, 1.0);
+                }
+                else if (currentState === 'gas') {
+                    p.x += p.vx * 2; p.y += p.vy * 2; p.z += p.vz * 2;
+                    if (Math.abs(p.x) > limit) p.vx *= -1;
+                    if (Math.abs(p.y) > limit) p.vy *= -1;
+                    if (Math.abs(p.z) > limit) p.vz *= -1;
+                    setCol(col, i, 0.8, 0.8, 0.8);
+                }
+                else if (currentState === 'plasma') {
+                    p.x += p.vx * 4; p.y += p.vy * 4; p.z += p.vz * 4;
+                    if (Math.abs(p.x) > limit) p.vx *= -1;
+                    if (Math.abs(p.y) > limit) p.vy *= -1;
+                    if (Math.abs(p.z) > limit) p.vz *= -1;
+                    setCol(col, i, 1.0, 0.4 + Math.random() * 0.4, 0.2);
+                }
+
+                pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z;
+            });
+
+            particleSystem.geometry.attributes.position.needsUpdate = true;
+            particleSystem.geometry.attributes.color.needsUpdate = true;
+
+            renderer.render(scene, camera);
+        }
+
+        function setCol(arr, i, r, g, b) {
+            arr[i * 3] = r; arr[i * 3 + 1] = g; arr[i * 3 + 2] = b;
+        }
+
+        function onResize() {
+            const container = document.getElementById('viz-container');
+            if (!container) return;
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        }
+
+        window.onload = function () {
+            setTimeout(init, 100);
+        };
+    </script>
+</body>
+
+</html>
