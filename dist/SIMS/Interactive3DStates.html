@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive States of Matter</title>
+    <style>
+        :root {
+            --primary: #007bff;
+            --bg-dark: #0f172a;
+            --card-bg: #1e293b;
+            --text-light: #f8fafc;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        header {
+            padding: 0.8rem 2rem;
+            background: rgba(15, 23, 42, 0.9);
+            border-bottom: 1px solid #334155;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.3rem;
+            color: var(--primary);
+        }
+
+        main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Sidebar Content */
+        #content-panel {
+            width: 380px;
+            padding: 1.5rem;
+            overflow-y: auto;
+            background: var(--card-bg);
+            border-right: 1px solid #334155;
+            box-shadow: 4px 0 15px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Visualization Area */
+        #viz-container {
+            flex: 1;
+            position: relative;
+            background: #000;
+            min-height: 300px;
+        }
+
+        #threejs-canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .dashboard {
+            position: absolute;
+            bottom: 1.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 600px;
+            z-index: 50;
+            background: rgba(15, 23, 42, 0.85);
+            padding: 1.2rem;
+            border-radius: 20px;
+            backdrop-filter: blur(12px);
+            border: 1px solid #444;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            justify-content: space-between;
+        }
+
+        .slider-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        input[type=range] {
+            width: 100%;
+            cursor: pointer;
+        }
+
+        select,
+        button.unit-toggle {
+            background: #334155;
+            color: white;
+            border: 1px solid #475569;
+            padding: 0.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .temp-display {
+            font-family: monospace;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--primary);
+            min-width: 100px;
+            text-align: right;
+        }
+
+        .state-info {
+            display: none;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .state-info.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .transition-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            font-size: 0.8rem;
+        }
+
+        .transition-table th,
+        .transition-table td {
+            border: 1px solid #334155;
+            padding: 6px;
+            text-align: left;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        .endo {
+            background: #1e3a8a;
+            color: #93c5fd;
+        }
+
+        .exo {
+            background: #7f1d1d;
+            color: #fca5a5;
+        }
+
+        .viz-tip {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            font-size: 0.75rem;
+            color: #64748b;
+            pointer-events: none;
+        }
+
+        @media (max-width: 900px) {
+            main {
+                flex-direction: column-reverse;
+            }
+
+            #content-panel {
+                width: 100%;
+                height: 35%;
+                border-right: none;
+                border-top: 1px solid #334155;
+            }
+
+            .dashboard {
+                bottom: 0.5rem;
+                width: 95%;
+                padding: 0.8rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1>States of Matter Explorer</h1>
+        <div id="status-tag" style="font-size: 0.8rem; color: #94a3b8;">Simulation: Initializing...</div>
+    </header>
+
+    <main>
+        <section id="content-panel">
+            <div id="element-title" style="margin-bottom: 1rem;">
+                <h2 id="current-element-name" style="margin: 0; color: var(--primary);">Water (H₂O)</h2>
+                <span id="current-state-label" class="tag endo">Solid</span>
+            </div>
+
+            <div id="info-solid" class="state-info active">
+                <h3>Solid State</h3>
+                <p>Particles are tightly packed in a regular crystal lattice. Kinetic energy is low, resulting only in
+                    vibrational motion.</p>
+            </div>
+
+            <div id="info-liquid" class="state-info">
+                <h3>Liquid State</h3>
+                <p>Kinetic energy has overcome some attractive forces. Particles flow while remaining in close contact.
+                </p>
+            </div>
+
+            <div id="info-gas" class="state-info">
+                <h3>Gaseous State</h3>
+                <p>Particles move independently at high speeds. Intermolecular forces are negligible.</p>
+            </div>
+
+            <div id="info-plasma" class="state-info">
+                <h3>Plasma State</h3>
+                <p>High energy has ionized the atoms, stripping electrons. Highly conductive and magnetic.</p>
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid #334155; margin: 1.5rem 0;">
+
+            <h3>Element Data</h3>
+            <p id="element-summary" style="font-size: 0.9rem; color: #94a3b8;"></p>
+
+            <table class="transition-table">
+                <thead>
+                    <tr>
+                        <th>Transition</th>
+                        <th>Type</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Melting</td>
+                        <td><span class="tag endo">Endothermic</span></td>
+                    </tr>
+                    <tr>
+                        <td>Vaporization</td>
+                        <td><span class="tag endo">Endothermic</span></td>
+                    </tr>
+                    <tr>
+                        <td>Ionization</td>
+                        <td><span class="tag endo">Endothermic</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="viz-container">
+            <div class="viz-tip">Drag to rotate • Scroll to zoom</div>
+
+            <div class="dashboard">
+                <div class="control-row">
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                        <label style="font-size:0.7rem; color:#94a3b8;">Substance</label>
+                        <select id="element-select" onchange="handleElementChange()">
+                            <option value="water">Water (H₂O)</option>
+                            <option value="argon">Argon (Ar)</option>
+                            <option value="mercury">Mercury (Hg)</option>
+                            <option value="iron">Iron (Fe)</option>
+                        </select>
+                    </div>
+                    <div class="temp-display" id="temp-val-display">0°C</div>
+                    <button class="unit-toggle" id="unit-toggle-btn" onclick="toggleUnit()">Switch to K</button>
+                </div>
+
+                <div class="slider-container">
+                    <input type="range" id="temp-slider" min="-14" max="6000" value="0" step="1"
+                        oninput="handleTempChange()">
+                    <div style="display:flex; justify-content:space-between; font-size:0.7rem; color:#64748b;">
+                        <span>-14°C</span>
+                        <span>Temperature Control</span>
+                        <span>6000°C</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="threejs-canvas"></div>
+        </section>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        let scene, camera, renderer, controls, particleSystem, particles = [];
+        let currentTempC = 0;
+        let isKelvin = false;
+        let currentElement = 'water';
+        let currentState = 'solid';
+
+        const elements = {
+            water: { name: 'Water (H₂O)', melt: 0, boil: 100, plasma: 5000, desc: 'Polar molecule with hydrogen bonding.' },
+            argon: { name: 'Argon (Ar)', melt: -189, boil: -185, plasma: 3000, desc: 'Noble gas with weak Van der Waals forces.' },
+            mercury: { name: 'Mercury (Hg)', melt: -39, boil: 357, plasma: 4500, desc: 'Liquid metal at standard conditions.' },
+            iron: { name: 'Iron (Fe)', melt: 1538, boil: 2862, plasma: 5500, desc: 'Metallic solid with high melting point.' }
+        };
+
+        const PARTICLE_COUNT = 800;
+        const BOX_SIZE = 20;
+
+        function init() {
+            const container = document.getElementById('viz-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+            camera.position.set(20, 20, 30);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.getElementById('threejs-canvas').appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            const geo = new THREE.BufferGeometry();
+            const posArr = new Float32Array(PARTICLE_COUNT * 3);
+            const colArr = new Float32Array(PARTICLE_COUNT * 3);
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                particles.push({
+                    x: 0, y: 0, z: 0,
+                    vx: (Math.random() - 0.5) * 0.1,
+                    vy: (Math.random() - 0.5) * 0.1,
+                    vz: (Math.random() - 0.5) * 0.1,
+                    targetX: 0, targetY: 0, targetZ: 0
+                });
+            }
+
+            geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+            geo.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
+
+            const mat = new THREE.PointsMaterial({
+                size: 0.6,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8,
+                map: createCircleTexture(),
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+
+            particleSystem = new THREE.Points(geo, mat);
+            scene.add(particleSystem);
+
+            const boxGeo = new THREE.BoxGeometry(BOX_SIZE, BOX_SIZE, BOX_SIZE);
+            const edges = new THREE.EdgesGeometry(boxGeo);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.3 }));
+            scene.add(line);
+
+            window.addEventListener('resize', onResize);
+            handleTempChange();
+            document.getElementById('status-tag').textContent = "Simulation: Active";
+            animate();
+        }
+
+        function createCircleTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+            grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+            grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 64, 64);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        window.toggleUnit = function () {
+            isKelvin = !isKelvin;
+            document.getElementById('unit-toggle-btn').textContent = isKelvin ? "Switch to °C" : "Switch to K";
+            updateDisplay();
+        };
+
+        window.handleElementChange = function () {
+            currentElement = document.getElementById('element-select').value;
+            const el = elements[currentElement];
+            document.getElementById('current-element-name').textContent = el.name;
+            document.getElementById('element-summary').textContent = el.desc;
+            handleTempChange();
+        };
+
+        window.handleTempChange = function () {
+            currentTempC = parseInt(document.getElementById('temp-slider').value);
+            const el = elements[currentElement];
+
+            let newState = 'solid';
+            if (currentTempC >= el.plasma) newState = 'plasma';
+            else if (currentTempC >= el.boil) newState = 'gas';
+            else if (currentTempC >= el.melt) newState = 'liquid';
+
+            if (newState !== currentState) {
+                currentState = newState;
+                updateVisualState(newState);
+            }
+            updateDisplay();
+        };
+
+        function updateDisplay() {
+            const val = isKelvin ? (currentTempC + 273.15).toFixed(0) : currentTempC;
+            const unit = isKelvin ? " K" : "°C";
+            document.getElementById('temp-val-display').textContent = val + unit;
+            document.getElementById('current-state-label').textContent = currentState.toUpperCase();
+        }
+
+        function updateVisualState(state) {
+            document.querySelectorAll('.state-info').forEach(info => info.classList.remove('active'));
+            document.getElementById('info-' + state).classList.add('active');
+
+            if (state === 'solid') {
+                const side = Math.ceil(Math.pow(PARTICLE_COUNT, 1 / 3));
+                const spacing = 1.3;
+                particles.forEach((p, i) => {
+                    p.targetX = ((i % side) - side / 2) * spacing;
+                    p.targetY = ((Math.floor(i / side) % side) - side / 2) * spacing;
+                    p.targetZ = (Math.floor(i / (side * side)) - side / 2) * spacing;
+                });
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (controls) controls.update();
+
+            const pos = particleSystem.geometry.attributes.position.array;
+            const col = particleSystem.geometry.attributes.color.array;
+            const limit = BOX_SIZE / 2;
+
+            particles.forEach((p, i) => {
+                if (currentState === 'solid') {
+                    p.x = p.targetX + (Math.random() - 0.5) * 0.08;
+                    p.y = p.targetY + (Math.random() - 0.5) * 0.08;
+                    p.z = p.targetZ + (Math.random() - 0.5) * 0.08;
+                    setCol(col, i, 0.4, 0.7, 1.0);
+                }
+                else if (currentState === 'liquid') {
+                    const speed = 0.01 + (currentTempC / 5000) * 0.02;
+                    p.vx += (Math.random() - 0.5) * speed;
+                    p.vy += (Math.random() - 0.5) * speed - 0.01; // Gravity feel
+                    p.vz += (Math.random() - 0.5) * speed;
+                    p.x += p.vx; p.y += p.vy; p.z += p.vz;
+
+                    if (Math.abs(p.x) > limit) p.vx *= -0.8;
+                    if (p.y < -limit) { p.y = -limit; p.vy *= -0.3; }
+                    if (p.y > limit) { p.y = limit; p.vy *= -0.3; }
+                    if (Math.abs(p.z) > limit) p.vz *= -0.8;
+                    setCol(col, i, 0.2, 0.5, 1.0);
+                }
+                else if (currentState === 'gas') {
+                    const speed = 1.5 + (currentTempC / 3000);
+                    p.x += p.vx * speed; p.y += p.vy * speed; p.z += p.vz * speed;
+                    if (Math.abs(p.x) > limit) p.vx *= -1;
+                    if (Math.abs(p.y) > limit) p.vy *= -1;
+                    if (Math.abs(p.z) > limit) p.vz *= -1;
+                    setCol(col, i, 0.8, 0.8, 0.8);
+                }
+                else if (currentState === 'plasma') {
+                    const speed = 3.0 + (currentTempC / 2000);
+                    p.x += p.vx * speed; p.y += p.vy * speed; p.z += p.vz * speed;
+                    if (Math.abs(p.x) > limit) p.vx *= -1;
+                    if (Math.abs(p.y) > limit) p.vy *= -1;
+                    if (Math.abs(p.z) > limit) p.vz *= -1;
+                    const r = 1.0;
+                    const g = 0.3 + Math.random() * 0.5;
+                    setCol(col, i, r, g, 0.1);
+                }
+                pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z;
+            });
+
+            particleSystem.geometry.attributes.position.needsUpdate = true;
+            particleSystem.geometry.attributes.color.needsUpdate = true;
+            renderer.render(scene, camera);
+        }
+
+        function setCol(arr, i, r, g, b) {
+            arr[i * 3] = r; arr[i * 3 + 1] = g; arr[i * 3 + 2] = b;
+        }
+
+        function onResize() {
+            const container = document.getElementById('viz-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        window.onload = () => setTimeout(init, 100);
+    </script>
+</body>
+
+</html>

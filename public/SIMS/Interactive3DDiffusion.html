@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Diffusion Simulation</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: sans-serif;
+            background-color: #050505;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            color: white;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .control-panel {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(20, 20, 20, 0.8);
+            backdrop-filter: blur(8px);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            width: 280px;
+            pointer-events: auto;
+        }
+
+        input[type=range] {
+            width: 100%;
+            cursor: pointer;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: #aaa;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="ui-layer">
+        <h1 class="text-2xl font-bold">Molecular Diffusion</h1>
+        <p class="text-sm opacity-80">Linear kinetic motion & semi-permeable membrane</p>
+    </div>
+
+    <div class="control-panel">
+        <div class="mb-4">
+            <label class="block text-sm font-medium mb-1">Particle Velocity</label>
+            <input type="range" id="tempRange" min="0.01" max="0.2" step="0.01" value="0.05">
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-sm font-medium mb-1">Membrane Permeability</label>
+            <input type="range" id="permRange" min="0" max="1" step="0.05" value="0.3">
+            <div class="flex justify-between text-[10px] mt-1">
+                <span>Solid Wall</span>
+                <span>Fully Open</span>
+            </div>
+        </div>
+
+        <button id="resetBtn"
+            class="w-full bg-blue-600 hover:bg-blue-500 py-2 rounded-lg transition-colors text-sm font-semibold mb-4">
+            Reset Distribution
+        </button>
+
+        <div class="border-t border-white/10 pt-4">
+            <div class="stat-label">Particle Distribution (Left : Right)</div>
+            <div class="flex h-4 w-full bg-gray-800 rounded-full overflow-hidden mt-1">
+                <div id="blueBar" class="bg-blue-500 h-full transition-all duration-300" style="width: 50%"></div>
+                <div id="redBar" class="bg-red-500 h-full transition-all duration-300" style="width: 50%"></div>
+            </div>
+            <div class="flex justify-between text-[10px] mt-1">
+                <span id="blueCount">500</span>
+                <span id="redCount">500</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, particles;
+        const PARTICLE_COUNT = 1000;
+        const boxDim = { x: 10, y: 5, z: 5 };
+
+        let particleData = [];
+        let velocityScale = 0.05;
+        let permeability = 0.3;
+
+        const tempRange = document.getElementById('tempRange');
+        const permRange = document.getElementById('permRange');
+        const resetBtn = document.getElementById('resetBtn');
+        const blueBar = document.getElementById('blueBar');
+        const redBar = document.getElementById('redBar');
+        const blueCountText = document.getElementById('blueCount');
+        const redCountText = document.getElementById('redCount');
+
+        window.onload = function () {
+            init();
+            animate();
+        };
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(10, 7, 12);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+            const pointLight = new THREE.PointLight(0xffffff, 1);
+            pointLight.position.set(10, 10, 10);
+            scene.add(pointLight);
+
+            // Chamber
+            const boxGeom = new THREE.BoxGeometry(boxDim.x, boxDim.y, boxDim.z);
+            const boxMat = new THREE.MeshPhongMaterial({
+                color: 0x88ccff,
+                transparent: true,
+                opacity: 0.1,
+                shininess: 100,
+                side: THREE.DoubleSide
+            });
+            const chamber = new THREE.Mesh(boxGeom, boxMat);
+            scene.add(chamber);
+
+            const edges = new THREE.EdgesGeometry(boxGeom);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.2, transparent: true }));
+            scene.add(line);
+
+            // Membrane
+            const planeGeom = new THREE.PlaneGeometry(boxDim.z, boxDim.y);
+            const planeMat = new THREE.MeshBasicMaterial({
+                color: 0xffff00,
+                transparent: true,
+                opacity: 0.2,
+                side: THREE.DoubleSide,
+                wireframe: true
+            });
+            const membrane = new THREE.Mesh(planeGeom, planeMat);
+            membrane.rotation.y = Math.PI / 2;
+            scene.add(membrane);
+
+            // Particles Setup
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(PARTICLE_COUNT * 3);
+            const colors = new Float32Array(PARTICLE_COUNT * 3);
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const isLeft = i < PARTICLE_COUNT / 2;
+                const x = isLeft ? (Math.random() * -4.8 - 0.1) : (Math.random() * 4.8 + 0.1);
+                const y = (Math.random() - 0.5) * (boxDim.y - 0.2);
+                const z = (Math.random() - 0.5) * (boxDim.z - 0.2);
+
+                positions[i * 3] = x;
+                positions[i * 3 + 1] = y;
+                positions[i * 3 + 2] = z;
+
+                if (isLeft) {
+                    colors[i * 3] = 0.3; colors[i * 3 + 1] = 0.6; colors[i * 3 + 2] = 1.0;
+                } else {
+                    colors[i * 3] = 1.0; colors[i * 3 + 1] = 0.3; colors[i * 3 + 2] = 0.3;
+                }
+
+                // Initial random unit direction
+                const dir = new THREE.Vector3(
+                    Math.random() - 0.5,
+                    Math.random() - 0.5,
+                    Math.random() - 0.5
+                ).normalize();
+
+                particleData.push({
+                    vx: dir.x,
+                    vy: dir.y,
+                    vz: dir.z
+                });
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const material = new THREE.PointsMaterial({
+                size: 0.18,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.9
+            });
+
+            particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+
+            window.addEventListener('resize', onWindowResize, false);
+
+            let isMouseDown = false;
+            document.addEventListener('mousedown', () => isMouseDown = true);
+            document.addEventListener('mouseup', () => isMouseDown = false);
+            document.addEventListener('mousemove', (e) => {
+                if (isMouseDown) {
+                    scene.rotation.y += e.movementX * 0.005;
+                    scene.rotation.x += e.movementY * 0.005;
+                }
+            });
+
+            tempRange.oninput = (e) => { velocityScale = parseFloat(e.target.value); };
+            permRange.oninput = (e) => { permeability = parseFloat(e.target.value); };
+            resetBtn.onclick = resetParticles;
+        }
+
+        function resetParticles() {
+            const positions = particles.geometry.attributes.position.array;
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const isLeft = i < PARTICLE_COUNT / 2;
+                positions[i * 3] = isLeft ? (Math.random() * -4.8 - 0.1) : (Math.random() * 4.8 + 0.1);
+                positions[i * 3 + 1] = (Math.random() - 0.5) * (boxDim.y - 0.2);
+                positions[i * 3 + 2] = (Math.random() - 0.5) * (boxDim.z - 0.2);
+
+                const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+                particleData[i].vx = dir.x;
+                particleData[i].vy = dir.y;
+                particleData[i].vz = dir.z;
+            }
+            particles.geometry.attributes.position.needsUpdate = true;
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const positions = particles.geometry.attributes.position.array;
+            let leftCount = 0;
+
+            const halfX = boxDim.x / 2;
+            const halfY = boxDim.y / 2;
+            const halfZ = boxDim.z / 2;
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                let px = positions[i * 3];
+                let py = positions[i * 3 + 1];
+                let pz = positions[i * 3 + 2];
+
+                // Constant linear velocity (No Brownian random updates)
+                let dx = particleData[i].vx * velocityScale;
+                let dy = particleData[i].vy * velocityScale;
+                let dz = particleData[i].vz * velocityScale;
+
+                let nextX = px + dx;
+                let nextY = py + dy;
+                let nextZ = pz + dz;
+
+                // Wall Collisions (Perfect reflection)
+                if (Math.abs(nextX) > halfX) {
+                    particleData[i].vx *= -1;
+                    nextX = px;
+                }
+                if (Math.abs(nextY) > halfY) {
+                    particleData[i].vy *= -1;
+                    nextY = py;
+                }
+                if (Math.abs(nextZ) > halfZ) {
+                    particleData[i].vz *= -1;
+                    nextZ = pz;
+                }
+
+                // Membrane Logic (At x = 0)
+                // If crossing x=0
+                if ((px > 0 && nextX <= 0) || (px < 0 && nextX >= 0)) {
+                    if (Math.random() > permeability) {
+                        // Reflect back
+                        particleData[i].vx *= -1;
+                        nextX = px;
+                    }
+                }
+
+                positions[i * 3] = nextX;
+                positions[i * 3 + 1] = nextY;
+                positions[i * 3 + 2] = nextZ;
+
+                if (nextX < 0) leftCount++;
+            }
+
+            particles.geometry.attributes.position.needsUpdate = true;
+
+            // Stats Update
+            const leftRatio = (leftCount / PARTICLE_COUNT) * 100;
+            blueBar.style.width = `${leftRatio}%`;
+            redBar.style.width = `${100 - leftRatio}%`;
+            blueCountText.innerText = leftCount;
+            redCountText.innerText = PARTICLE_COUNT - leftCount;
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+
+</html>
